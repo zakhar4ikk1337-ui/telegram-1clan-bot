@@ -22,7 +22,7 @@ async def apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.reply_text(
         "Отправьте:\n\n"
         "1️⃣ Скрин профиля с временем\n"
-        "2️⃣ Видео 1 катки Закладка бомби (ЗБ)"
+        "2️⃣ Видео 1 катки ММ"
     )
 
 async def media(update: Update, context: ContextTypes.DEFAULT_TYPE):
