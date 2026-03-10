@@ -1,5 +1,7 @@
+
 import logging
 import time
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -21,19 +23,34 @@ cooldown = {}
 
 PLAYERS_FILE = "players.txt"
 
+waiting_days = set()
+orders = {}
+waiting_payment = {}
+
+promo_codes = {
+"7days": ["AAA111","AAA112","AAA113","AAA114","AAA115","AAA116","AAA117","AAA118","AAA119","AAA120"],
+"30days": ["BBB111","BBB112","BBB113","BBB114","BBB115","BBB116","BBB117","BBB118","BBB119","BBB120"]
+}
+
+used_codes = []
+
+# START
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    user = update.message.from_user
-
-    keyboard = [[InlineKeyboardButton("📨 Подать заявку", callback_data="apply")]]
+    keyboard = [
+        [InlineKeyboardButton("📨 Подать заявку", callback_data="apply")],
+        [InlineKeyboardButton("🎁 Промокод", callback_data="promo")],
+        [InlineKeyboardButton("💰 Купить за голду", callback_data="buy")]
+    ]
 
     await update.message.reply_text(
-        "👋 Добро пожаловать в клан 3TF\n\n"
-        "Нажмите кнопку ниже чтобы подать заявку",
+        "👋 Добро пожаловать в клан 3TF",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
+# ПОДАТЬ ЗАЯВКУ
 
 async def apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -44,17 +61,19 @@ async def apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     now = time.time()
 
     if user.id in cooldown and now - cooldown[user.id] < 300:
-        await query.message.reply_text("⏳ Подождите 5 минут перед новой заявкой")
+        await query.message.reply_text("⏳ Подождите 5 минут")
         return
 
     cooldown[user.id] = now
 
     await query.message.reply_text(
-        "📨 Отправьте:\n\n"
-        "1️⃣ Скрин профиля с временем\n"
-        "2️⃣ Видео 1 катки"
+        "Отправьте:\n\n"
+        "1️⃣ Скрин профиля\n"
+        "2️⃣ Видео катки"
     )
 
+
+# ПОЛУЧЕНИЕ МЕДИА
 
 async def media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -73,12 +92,12 @@ async def media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         ADMIN_ID,
-        f"📨 Новая заявка\n\n"
-        f"👤 @{user.username}\n"
-        f"🆔 {user.id}",
+        f"📨 Новая заявка\n\n@{user.username}\n{user.id}",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
+# РЕШЕНИЕ АДМИНА
 
 async def decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -94,7 +113,7 @@ async def decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             user_id,
-            "✅ Вы приняты\n\nНапишите ваш игровой ID"
+            "✅ Вы приняты\n\nНапишите игровой ID"
         )
 
         await query.edit_message_text("Игрок принят")
@@ -117,6 +136,8 @@ async def decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Игрок отклонён")
 
 
+# ПОЛУЧЕНИЕ ID
+
 async def get_player_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.message.from_user
@@ -130,16 +151,15 @@ async def get_player_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await context.bot.send_message(
             ADMIN_ID,
-            f"🎮 Новый игрок\n\n"
-            f"👤 @{user.username}\n"
-            f"🆔 {user.id}\n"
-            f"🎯 Игровой ID: {player_id}"
+            f"🎮 Новый игрок\n@{user.username}\nID: {player_id}"
         )
 
-        await update.message.reply_text("✅ ID отправлен администрации")
+        await update.message.reply_text("ID отправлен")
 
         waiting_for_id.remove(user.id)
 
+
+# СПИСОК ИГРОКОВ
 
 async def players(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -150,49 +170,147 @@ async def players(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with open(PLAYERS_FILE, "r", encoding="utf-8") as f:
             data = f.read()
 
-        if data == "":
-            data = "Нет игроков"
-
-        await update.message.reply_text(f"📋 Игроки:\n\n{data}")
+        await update.message.reply_text(data)
 
     except:
-        await update.message.reply_text("Файл игроков пуст")
+        await update.message.reply_text("Нет игроков")
 
 
-async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ПРОМОКОД
 
-    if update.message.from_user.id != ADMIN_ID:
-        return
-
-    keyboard = [
-        [InlineKeyboardButton("📋 Список игроков", callback_data="players")],
-    ]
-
-    await update.message.reply_text(
-        "👑 Админ панель",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-
-async def admin_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
     await query.answer()
 
-    if query.data == "players":
+    await query.message.reply_text("Введите промокод")
 
-        try:
-            with open(PLAYERS_FILE, "r", encoding="utf-8") as f:
-                data = f.read()
 
-            if data == "":
-                data = "Нет игроков"
+async def check_promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-            await query.message.reply_text(data)
+    code = update.message.text
 
-        except:
-            await query.message.reply_text("Файл пуст")
+    if code in used_codes:
+        await update.message.reply_text("❌ Уже использован")
+        return
 
+    if code in promo_codes["7days"]:
+
+        used_codes.append(code)
+
+        await update.message.reply_text("✅ Промокод активирован\n7 дней")
+
+    elif code in promo_codes["30days"]:
+
+        used_codes.append(code)
+
+        await update.message.reply_text("✅ Промокод активирован\n30 дней")
+
+
+
+# ПОКУПКА
+
+async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    await query.answer()
+
+    waiting_days.add(query.from_user.id)
+
+    await query.message.reply_text(
+        "Введите дни\n\n7 или 30"
+    )
+
+
+async def days(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user = update.message.from_user
+
+    if user.id not in waiting_days:
+        return
+
+    text = update.message.text
+
+    if text not in ["7","30"]:
+
+        await update.message.reply_text("Можно только 7 или 30")
+        return
+
+    days = int(text)
+
+    price = 100 if days == 7 else 300
+
+    orders[user.id] = days
+    waiting_days.remove(user.id)
+
+    keyboard = [[InlineKeyboardButton("Купить", callback_data="confirm")]]
+
+    await update.message.reply_text(
+        f"{days} дней = {price} голды",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    await query.answer()
+
+    user = query.from_user
+    days = orders[user.id]
+
+    waiting_payment[user.id] = days
+
+    await context.bot.send_message(
+        ADMIN_ID,
+        f"🛒 Новый заказ\n@{user.username}\n{days} дней"
+    )
+
+    await query.message.reply_text("Ожидайте скрин оплаты")
+
+
+# СКРИН АДМИНА
+
+async def admin_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if update.message.from_user.id != ADMIN_ID:
+        return
+
+    if not waiting_payment:
+        return
+
+    user_id = list(waiting_payment.keys())[0]
+
+    await context.bot.forward_message(
+        user_id,
+        update.message.chat_id,
+        update.message.message_id
+    )
+
+    keyboard = [[InlineKeyboardButton("✅ Оплатил", callback_data="paid")]]
+
+    await context.bot.send_message(
+        user_id,
+        "Нажмите после оплаты",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    await query.answer()
+
+    user = query.from_user
+    days = waiting_payment[user.id]
+
+    await context.bot.send_message(
+        ADMIN_ID,
+        f"Игрок ждёт промокод\n{days} дней"
+    )
+
+
+# MAIN
 
 def main():
 
@@ -200,18 +318,22 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("players", players))
-    app.add_handler(CommandHandler("admin", admin))
 
     app.add_handler(CallbackQueryHandler(apply, pattern="apply"))
     app.add_handler(CallbackQueryHandler(decision, pattern="accept_|reject_"))
-    app.add_handler(CallbackQueryHandler(admin_buttons, pattern="players"))
+
+    app.add_handler(CallbackQueryHandler(promo, pattern="promo"))
+    app.add_handler(CallbackQueryHandler(buy, pattern="buy"))
+    app.add_handler(CallbackQueryHandler(confirm, pattern="confirm"))
+    app.add_handler(CallbackQueryHandler(paid, pattern="paid"))
 
     app.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO, media))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, get_player_id))
+    app.add_handler(MessageHandler(filters.TEXT, days))
+    app.add_handler(MessageHandler(filters.PHOTO, admin_screen))
 
     app.run_polling()
 
 
 if __name__ == "__main__":
     main()
-
