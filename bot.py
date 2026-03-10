@@ -79,6 +79,57 @@ async def media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.message.from_user
 
+    # ЕСЛИ ЭТО АДМИН — ЭТО СКРИН ОПЛАТЫ
+    if user.id == ADMIN_ID:
+
+        if not waiting_payment:
+            return
+
+        buyer_id = list(waiting_payment.keys())[0]
+
+        await context.bot.forward_message(
+            buyer_id,
+            update.message.chat_id,
+            update.message.message_id
+        )
+
+        keyboard = [[InlineKeyboardButton(
+            "✅ Оплатил",
+            callback_data="paid"
+        )]]
+
+        await context.bot.send_message(
+            buyer_id,
+            "📸 Скрин оплаты\n\nНажмите кнопку после оплаты",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+        return
+
+
+    # ЕСЛИ ЭТО ИГРОК — ЭТО ЗАЯВКА В КЛАН
+
+    await context.bot.forward_message(
+        ADMIN_ID,
+        update.message.chat_id,
+        update.message.message_id
+    )
+
+    keyboard = [[
+        InlineKeyboardButton("✅ Принять", callback_data=f"accept_{user.id}"),
+        InlineKeyboardButton("❌ Отказать", callback_data=f"reject_{user.id}")
+    ]]
+
+    await context.bot.send_message(
+        ADMIN_ID,
+        f"📨 Новая заявка\n\n"
+        f"👤 @{user.username}\n"
+        f"🆔 {user.id}",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+    user = update.message.from_user
+
     await context.bot.forward_message(
         ADMIN_ID,
         update.message.chat_id,
@@ -345,4 +396,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
