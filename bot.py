@@ -243,6 +243,14 @@ async def days(update: Update, context: ContextTypes.DEFAULT_TYPE):
     orders[user.id] = days
     waiting_days.remove(user.id)
 
+    await context.bot.send_message(
+    ADMIN_ID,
+    f"🛒 Новый заказ\n\n"
+    f"👤 @{user.username}\n"
+    f"🆔 {user.id}\n"
+    f"📅 {days} дней"
+)
+
     keyboard = [[InlineKeyboardButton("Купить", callback_data="confirm")]]
 
     await update.message.reply_text(
@@ -328,8 +336,8 @@ def main():
     app.add_handler(CallbackQueryHandler(paid, pattern="paid"))
 
     app.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO, media))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, days))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, get_player_id))
-    app.add_handler(MessageHandler(filters.TEXT, days))
     app.add_handler(MessageHandler(filters.PHOTO, admin_screen))
 
     app.run_polling()
@@ -337,3 +345,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
