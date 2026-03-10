@@ -4,7 +4,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 
 TOKEN = "8771277043:AAF9ot5lj0G0HwGImuLHi-JUNSTKM6TEzz8"
 ADMIN_ID = 5889477300
-ADMIN_USERNAME = "Kroniq_Pensia"
+ADMIN_USERNAME = "@Kroniq_Pensia"
 
 logging.basicConfig(level=logging.INFO)
 
@@ -176,3 +176,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
