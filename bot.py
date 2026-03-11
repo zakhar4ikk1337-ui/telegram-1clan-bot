@@ -1,15 +1,6 @@
 import logging
-import time
-
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    filters
-)
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 TOKEN = "8771277043:AAF9ot5lj0G0HwGImuLHi-JUNSTKM6TEzz8"
 ADMIN_ID = 5889477300
@@ -17,12 +8,10 @@ ADMIN_USERNAME = "Kroniq_Pensia"
 
 logging.basicConfig(level=logging.INFO)
 
-# заявки
 waiting_application = set()
-
-# покупка
 waiting_days = set()
 waiting_game_id = set()
+waiting_promo_input = set()
 
 orders = {}
 game_ids = {}
@@ -32,15 +21,11 @@ waiting_confirm_user = None
 waiting_promo_user = None
 
 promo_codes = {
-    "7days": ["AAA111","AAA112","AAA113","AAA114","AAA115"],
-    "30days": ["BBB111","BBB112","BBB113","BBB114","BBB115"]
+    "7days": ["AAA111","AAA112","AAA113"],
+    "30days": ["BBB111","BBB112","BBB113"]
 }
 
 used_codes = []
-
-cooldown = {}
-
-applications = {}
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -62,13 +47,10 @@ async def apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    user = query.from_user
-    waiting_application.add(user.id)
+    waiting_application.add(query.from_user.id)
 
     await query.message.reply_text(
-        "📨 Отправьте:\n\n"
-        "1️⃣ Скрин профиля\n"
-        "2️⃣ Видео катки"
+        "📨 Отправьте скрин профиля или видео катки"
     )
 
 
@@ -80,7 +62,6 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     waiting_days.add(query.from_user.id)
 
     await query.message.reply_text(
-        "💰 Покупка доступа\n\n"
         "Введите количество дней\n\n"
         "7 дней — 100 голды\n"
         "30 дней — 300 голды"
@@ -91,6 +72,8 @@ async def promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
     await query.answer()
+
+    waiting_promo_input.add(query.from_user.id)
 
     await query.message.reply_text("Введите промокод")
 
@@ -122,7 +105,7 @@ async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    global waiting_confirm_user, waiting_promo_user
+    global waiting_promo_user
 
     query = update.callback_query
     await query.answer()
@@ -144,7 +127,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     text = update.message.text.strip()
 
-    # админ отправляет промокод
     if user.id == ADMIN_ID and waiting_promo_user:
 
         await context.bot.send_message(
@@ -157,7 +139,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         waiting_promo_user = None
         return
 
-    # выбор дней
+
     if user.id in waiting_days:
 
         if text not in ["7","30"]:
@@ -169,10 +151,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         waiting_days.remove(user.id)
         waiting_game_id.add(user.id)
 
-        await update.message.reply_text("🎮 Введите ваш игровой ID")
+        await update.message.reply_text("Введите ваш игровой ID")
         return
 
-    # ввод игрового ID
+
     if user.id in waiting_game_id:
 
         game_ids[user.id] = text
@@ -186,24 +168,29 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # проверка промокода
-    code = text.upper()
 
-    if code in used_codes:
-        await update.message.reply_text("❌ Промокод уже использован")
+    if user.id in waiting_promo_input:
+
+        waiting_promo_input.remove(user.id)
+
+        code = text.upper()
+
+        if code in used_codes:
+            await update.message.reply_text("❌ Промокод уже использован")
+            return
+
+        if code in promo_codes["7days"]:
+            used_codes.append(code)
+            await update.message.reply_text("✅ Промокод активирован\n7 дней в клане")
+            return
+
+        if code in promo_codes["30days"]:
+            used_codes.append(code)
+            await update.message.reply_text("✅ Промокод активирован\n30 дней в клане")
+            return
+
+        await update.message.reply_text("❌ Промокод не правильний")
         return
-
-    if code in promo_codes["7days"]:
-        used_codes.append(code)
-        await update.message.reply_text("✅ Промокод активирован\n7 дней в клане")
-        return
-
-    if code in promo_codes["30days"]:
-        used_codes.append(code)
-        await update.message.reply_text("✅ Промокод активирован\n30 дней в клане")
-        return
-
-    await update.message.reply_text("❌ Промокод не правильний")
 
 
 async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -244,7 +231,7 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    await update.message.reply_text("✅ Заявка отправлена")
+    await update.message.reply_text("Заявка отправлена")
 
     waiting_application.remove(user.id)
 
@@ -264,7 +251,7 @@ async def application_decision(update: Update, context: ContextTypes.DEFAULT_TYP
             "✅ Ваш запрос приняли\nСкоро вам придет запрос в клан 3TF"
         )
 
-        await query.edit_message_caption("✅ Заявка принята")
+        await query.edit_message_caption("Заявка принята")
 
     else:
 
@@ -273,7 +260,7 @@ async def application_decision(update: Update, context: ContextTypes.DEFAULT_TYP
             "❌ Ваш запрос отклонён"
         )
 
-        await query.edit_message_caption("❌ Заявка отклонена")
+        await query.edit_message_caption("Заявка отклонена")
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -295,7 +282,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_photo(
         waiting_screenshot_user,
         photo,
-        caption="💰 Оплатите по этому скрину и нажмите кнопку после оплаты",
+        caption="Оплатите и нажмите кнопку после оплаты",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
