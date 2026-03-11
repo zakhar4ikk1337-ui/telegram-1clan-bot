@@ -17,23 +17,21 @@ ADMIN_USERNAME = "Kroniq_Pensia"
 
 logging.basicConfig(level=logging.INFO)
 
-waiting_for_id = set()
-cooldown = {}
-
-PLAYERS_FILE = "players.txt"
-
 waiting_days = set()
 orders = {}
-waiting_payment = {}
 
-waiting_promo = {}
+waiting_screenshot_user = None
+waiting_confirm_user = None
+waiting_promo_user = None
 
 promo_codes = {
-"7days": ["AAA111","AAA112","AAA113","AAA114","AAA115","AAA116","AAA117","AAA118","AAA119","AAA120"],
-"30days": ["BBB111","BBB112","BBB113","BBB114","BBB115","BBB116","BBB117","BBB118","BBB119","BBB120"]
+"7days": ["AAA111","AAA112","AAA113","AAA114","AAA115"],
+"30days": ["BBB111","BBB112","BBB113","BBB114","BBB115"]
 }
 
 used_codes = []
+
+cooldown = {}
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -46,9 +44,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "👋 Добро пожаловать в клан 3TF\n\n"
-        "💰 Цены:\n"
-        "7 дней — 100 голды\n"
-        "30 дней — 300 голды\n\n"
+        f"Администратор: @{ADMIN_USERNAME}\n\n"
         "Выберите действие:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -100,103 +96,67 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    global waiting_screenshot_user
+
     query = update.callback_query
     await query.answer()
 
     user = query.from_user
     days = orders[user.id]
 
-    waiting_payment[user.id] = days
+    waiting_screenshot_user = user.id
+
+    username = f"@{user.username}" if user.username else f"ID:{user.id}"
 
     await context.bot.send_message(
         ADMIN_ID,
-        f"🛒 Новый заказ\n@{user.username}\n{days} дней\nЖдём скрин оплаты"
+        f"🛒 Новый заказ\n\n"
+        f"👤 Игрок: {username}\n"
+        f"📅 Тариф: {days} дней\n\n"
+        f"Админ: @{ADMIN_USERNAME}\n"
+        f"Отправьте скрин оплаты"
     )
 
-    await query.message.reply_text("Отправьте скрин оплаты")
+    await query.message.reply_text("⏳ Ожидайте скрин оплаты от администратора")
 
 
-# ОБРАБОТКА СКРИНОВ
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    user = update.message.from_user
-    photo = update.message.photo[-1].file_id
+    global waiting_confirm_user, waiting_promo_user
 
-    # покупатель отправил скрин
-    if user.id in waiting_payment:
+    query = update.callback_query
+    await query.answer()
 
-        days = waiting_payment[user.id]
+    waiting_promo_user = waiting_confirm_user
 
-        await context.bot.send_photo(
-            ADMIN_ID,
-            photo,
-            caption=f"💰 Скрин оплаты\n@{user.username}\n{days} дней"
-        )
+    await context.bot.send_message(
+        ADMIN_ID,
+        "💰 Игрок оплатил\nОтправьте промокод"
+    )
 
-        await update.message.reply_text("Скрин отправлен администратору")
-
-        waiting_promo[user.id] = days
-        waiting_payment.pop(user.id)
-
-        return
-
-    # админ отправляет скрин покупателю
-    if user.id == ADMIN_ID and waiting_promo:
-
-        buyer_id = list(waiting_promo.keys())[0]
-
-        await context.bot.send_photo(
-            buyer_id,
-            photo,
-            caption="✅ Оплата подтверждена"
-        )
-
-        await update.message.reply_text("Скрин отправлен покупателю")
-
-        return
+    await query.message.reply_text("⏳ Ожидайте промокод")
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    global waiting_promo_user
+
     user = update.message.from_user
     text = update.message.text.strip()
 
-    # админ отправляет промокод
-    if user.id == ADMIN_ID and waiting_promo:
-
-        buyer_id = list(waiting_promo.keys())[0]
+    if user.id == ADMIN_ID and waiting_promo_user:
 
         await context.bot.send_message(
-            buyer_id,
+            waiting_promo_user,
             f"🎟 Ваш промокод:\n{text}"
         )
 
         await update.message.reply_text("Промокод отправлен")
 
-        waiting_promo.pop(buyer_id)
-
+        waiting_promo_user = None
         return
 
 
-    # ввод игрового ID
-    if user.id in waiting_for_id:
-
-        with open(PLAYERS_FILE, "a", encoding="utf-8") as f:
-            f.write(f"{user.username} | {user.id} | {text}\n")
-
-        await context.bot.send_message(
-            ADMIN_ID,
-            f"🎮 Новый игрок\n@{user.username}\nID: {text}"
-        )
-
-        await update.message.reply_text("ID отправлен")
-
-        waiting_for_id.remove(user.id)
-
-        return
-
-
-    # ввод дней
     if user.id in waiting_days:
 
         if text not in ["7","30"]:
@@ -204,7 +164,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         days = int(text)
-
         price = 100 if days == 7 else 300
 
         orders[user.id] = days
@@ -222,7 +181,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
-    # проверка промокода
     code = text.upper()
 
     if code in used_codes:
@@ -239,6 +197,32 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ Промокод активирован\n📅 30 дней в клане 3TF")
         return
 
+    await update.message.reply_text("❌ Промокод не правильний")
+
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    global waiting_screenshot_user, waiting_confirm_user
+
+    user = update.message.from_user
+    photo = update.message.photo[-1].file_id
+
+    if user.id == ADMIN_ID and waiting_screenshot_user:
+
+        keyboard = [[InlineKeyboardButton("✅ Я оплатил", callback_data="paid")]]
+
+        await context.bot.send_photo(
+            waiting_screenshot_user,
+            photo,
+            caption="💰 Оплатите по этому скрину и нажмите кнопку после оплаты",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+        waiting_confirm_user = waiting_screenshot_user
+        waiting_screenshot_user = None
+
+        await update.message.reply_text("Скрин отправлен покупателю")
+
 
 def main():
 
@@ -250,6 +234,7 @@ def main():
     app.add_handler(CallbackQueryHandler(promo, pattern="promo"))
     app.add_handler(CallbackQueryHandler(buy, pattern="buy"))
     app.add_handler(CallbackQueryHandler(confirm, pattern="confirm"))
+    app.add_handler(CallbackQueryHandler(paid, pattern="paid"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
