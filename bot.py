@@ -153,27 +153,6 @@ async def decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Игрок отклонён")
 
 
-async def get_player_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    user = update.message.from_user
-
-    if user.id in waiting_for_id:
-
-        player_id = update.message.text
-
-        with open(PLAYERS_FILE, "a", encoding="utf-8") as f:
-            f.write(f"{user.username} | {user.id} | {player_id}\n")
-
-        await context.bot.send_message(
-            ADMIN_ID,
-            f"🎮 Новый игрок\n@{user.username}\nID: {player_id}"
-        )
-
-        await update.message.reply_text("ID отправлен")
-
-        waiting_for_id.remove(user.id)
-
-
 async def players(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if update.message.from_user.id != ADMIN_ID:
@@ -197,35 +176,6 @@ async def promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.reply_text("Введите промокод")
 
 
-async def check_promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    code = update.message.text.strip()
-
-    if code in used_codes:
-        await update.message.reply_text("❌ Промокод уже использован")
-        return
-
-    if code in promo_codes["7days"]:
-
-        used_codes.append(code)
-
-        await update.message.reply_text(
-            "✅ Ваш промокод рабочий\n7 дней в клане 3TF"
-        )
-        return
-
-    if code in promo_codes["30days"]:
-
-        used_codes.append(code)
-
-        await update.message.reply_text(
-            "✅ Ваш промокод рабочий\n30 дней в клане 3TF"
-        )
-        return
-
-    await update.message.reply_text("❌ Ошибка. Нерабочий промокод")
-
-
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -234,32 +184,6 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     waiting_days.add(query.from_user.id)
 
     await query.message.reply_text("Введите дни\n7 или 30")
-
-
-async def days(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    user = update.message.from_user
-
-    if user.id not in waiting_days:
-        return
-
-    text = update.message.text
-
-    if text not in ["7","30"]:
-        await update.message.reply_text("Можно только 7 или 30")
-        return
-
-    days = int(text)
-
-    orders[user.id] = days
-    waiting_days.remove(user.id)
-
-    keyboard = [[InlineKeyboardButton("Купить", callback_data="confirm")]]
-
-    await update.message.reply_text(
-        f"{days} дней",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
 
 
 async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -296,26 +220,84 @@ async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def send_promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ГЛАВНАЯ функция текста
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    if update.message.from_user.id != ADMIN_ID:
+    user = update.message.from_user
+    text = update.message.text.strip()
+
+    # админ отправляет промокод
+    if user.id == ADMIN_ID and waiting_promo:
+
+        buyer_id = list(waiting_promo.keys())[0]
+
+        await context.bot.send_message(
+            buyer_id,
+            f"🎟 Ваш промокод:\n{text}"
+        )
+
+        await update.message.reply_text("Промокод отправлен")
+
+        waiting_promo.pop(buyer_id)
+
         return
 
-    if not waiting_promo:
+    # ввод игрового ID
+    if user.id in waiting_for_id:
+
+        with open(PLAYERS_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{user.username} | {user.id} | {text}\n")
+
+        await context.bot.send_message(
+            ADMIN_ID,
+            f"🎮 Новый игрок\n@{user.username}\nID: {text}"
+        )
+
+        await update.message.reply_text("ID отправлен")
+
+        waiting_for_id.remove(user.id)
+
         return
 
-    user_id = list(waiting_promo.keys())[0]
+    # ввод дней
+    if user.id in waiting_days:
 
-    promo = update.message.text
+        if text not in ["7","30"]:
+            await update.message.reply_text("Можно только 7 или 30")
+            return
 
-    await context.bot.send_message(
-        user_id,
-        f"🎟 Ваш промокод:\n\n{promo}"
-    )
+        days = int(text)
 
-    await update.message.reply_text("Промокод отправлен")
+        orders[user.id] = days
+        waiting_days.remove(user.id)
 
-    waiting_promo.pop(user_id)
+        keyboard = [[InlineKeyboardButton("Купить", callback_data="confirm")]]
+
+        await update.message.reply_text(
+            f"{days} дней",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+        return
+
+    # проверка промокода
+    code = text.upper()
+
+    if code in used_codes:
+        await update.message.reply_text("❌ Промокод уже использован")
+        return
+
+    if code in promo_codes["7days"]:
+        used_codes.append(code)
+        await update.message.reply_text("✅ Промокод активирован\n7 дней в клане 3TF")
+        return
+
+    if code in promo_codes["30days"]:
+        used_codes.append(code)
+        await update.message.reply_text("✅ Промокод активирован\n30 дней в клане 3TF")
+        return
+
+    await update.message.reply_text("❌ Промокод не правильний")
 
 
 def main():
@@ -334,10 +316,8 @@ def main():
     app.add_handler(CallbackQueryHandler(paid, pattern="paid"))
 
     app.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO, media))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, days))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, get_player_id))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, send_promo))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check_promo))
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     app.run_polling()
 
