@@ -17,8 +17,10 @@ ADMIN_USERNAME = "Kroniq_Pensia"
 
 logging.basicConfig(level=logging.INFO)
 
+# заявки
 waiting_application = set()
 
+# покупка
 waiting_days = set()
 waiting_game_id = set()
 
@@ -30,13 +32,15 @@ waiting_confirm_user = None
 waiting_promo_user = None
 
 promo_codes = {
-"7days": ["AAA111","AAA112","AAA113","AAA114","AAA115"],
-"30days": ["BBB111","BBB112","BBB113","BBB114","BBB115"]
+    "7days": ["AAA111","AAA112","AAA113","AAA114","AAA115"],
+    "30days": ["BBB111","BBB112","BBB113","BBB114","BBB115"]
 }
 
 used_codes = []
 
 cooldown = {}
+
+applications = {}
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -59,7 +63,6 @@ async def apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user = query.from_user
-
     waiting_application.add(user.id)
 
     await query.message.reply_text(
@@ -141,6 +144,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
     text = update.message.text.strip()
 
+    # админ отправляет промокод
     if user.id == ADMIN_ID and waiting_promo_user:
 
         await context.bot.send_message(
@@ -153,7 +157,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         waiting_promo_user = None
         return
 
-
+    # выбор дней
     if user.id in waiting_days:
 
         if text not in ["7","30"]:
@@ -168,7 +172,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🎮 Введите ваш игровой ID")
         return
 
-
+    # ввод игрового ID
     if user.id in waiting_game_id:
 
         game_ids[user.id] = text
@@ -180,10 +184,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Нажмите кнопку чтобы оформить покупку",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-
         return
 
-
+    # проверка промокода
     code = text.upper()
 
     if code in used_codes:
@@ -212,6 +215,13 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     username = f"@{user.username}" if user.username else f"ID:{user.id}"
 
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Принять", callback_data=f"accept_{user.id}"),
+            InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_{user.id}")
+        ]
+    ]
+
     if update.message.photo:
 
         photo = update.message.photo[-1].file_id
@@ -219,7 +229,8 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_photo(
             ADMIN_ID,
             photo,
-            caption=f"📨 Новая заявка\n{username}"
+            caption=f"📨 Новая заявка\n{username}",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
     elif update.message.video:
@@ -229,12 +240,40 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_video(
             ADMIN_ID,
             video,
-            caption=f"📨 Новая заявка\n{username}"
+            caption=f"📨 Новая заявка\n{username}",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
     await update.message.reply_text("✅ Заявка отправлена")
 
     waiting_application.remove(user.id)
+
+
+async def application_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    user_id = int(data.split("_")[1])
+
+    if data.startswith("accept"):
+
+        await context.bot.send_message(
+            user_id,
+            "✅ Ваш запрос приняли\nСкоро вам придет запрос в клан 3TF"
+        )
+
+        await query.edit_message_caption("✅ Заявка принята")
+
+    else:
+
+        await context.bot.send_message(
+            user_id,
+            "❌ Ваш запрос отклонён"
+        )
+
+        await query.edit_message_caption("❌ Заявка отклонена")
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -277,6 +316,9 @@ def main():
     app.add_handler(CallbackQueryHandler(promo, pattern="promo"))
     app.add_handler(CallbackQueryHandler(confirm, pattern="confirm"))
     app.add_handler(CallbackQueryHandler(paid, pattern="paid"))
+
+    app.add_handler(CallbackQueryHandler(application_decision, pattern="accept_"))
+    app.add_handler(CallbackQueryHandler(application_decision, pattern="reject_"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO, handle_media))
