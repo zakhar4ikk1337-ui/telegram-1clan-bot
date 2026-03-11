@@ -26,15 +26,16 @@ waiting_days = set()
 orders = {}
 waiting_payment = {}
 
+waiting_promo = {}
+
 promo_codes = {
-    "7days": ["AAA111","AAA112","AAA113","AAA114","AAA115","AAA116","AAA117","AAA118","AAA119","AAA120"],
-    "30days": ["BBB111","BBB112","BBB113","BBB114","BBB115","BBB116","BBB117","BBB118","BBB119","BBB120"]
+"7days": ["AAA111","AAA112","AAA113","AAA114","AAA115","AAA116","AAA117","AAA118","AAA119","AAA120"],
+"30days": ["BBB111","BBB112","BBB113","BBB114","BBB115","BBB116","BBB117","BBB118","BBB119","BBB120"]
 }
 
 used_codes = []
 
 
-# START
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
@@ -49,7 +50,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ПОДАТЬ ЗАЯВКУ
 async def apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -71,7 +71,6 @@ async def apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ПОЛУЧЕНИЕ МЕДИА
 async def media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.message.from_user
@@ -99,7 +98,6 @@ async def media(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
-
     await context.bot.forward_message(
         ADMIN_ID,
         update.message.chat_id,
@@ -118,7 +116,6 @@ async def media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# РЕШЕНИЕ АДМИНА
 async def decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -156,7 +153,6 @@ async def decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Игрок отклонён")
 
 
-# ПОЛУЧЕНИЕ ID
 async def get_player_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.message.from_user
@@ -178,7 +174,6 @@ async def get_player_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
         waiting_for_id.remove(user.id)
 
 
-# СПИСОК ИГРОКОВ
 async def players(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if update.message.from_user.id != ADMIN_ID:
@@ -194,7 +189,6 @@ async def players(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Нет игроков")
 
 
-# ПРОМОКОД
 async def promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -205,22 +199,33 @@ async def promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def check_promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    code = update.message.text
+    code = update.message.text.strip()
 
     if code in used_codes:
-        await update.message.reply_text("❌ Уже использован")
+        await update.message.reply_text("❌ Промокод уже использован")
         return
 
     if code in promo_codes["7days"]:
+
         used_codes.append(code)
-        await update.message.reply_text("✅ Промокод активирован\n7 дней")
 
-    elif code in promo_codes["30days"]:
+        await update.message.reply_text(
+            "✅ Ваш промокод рабочий\n7 дней в клане 3TF"
+        )
+        return
+
+    if code in promo_codes["30days"]:
+
         used_codes.append(code)
-        await update.message.reply_text("✅ Промокод активирован\n30 дней")
+
+        await update.message.reply_text(
+            "✅ Ваш промокод рабочий\n30 дней в клане 3TF"
+        )
+        return
+
+    await update.message.reply_text("❌ Ошибка. Нерабочий промокод")
 
 
-# ПОКУПКА
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -228,7 +233,7 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     waiting_days.add(query.from_user.id)
 
-    await query.message.reply_text("Введите дни\n\n7 или 30")
+    await query.message.reply_text("Введите дни\n7 или 30")
 
 
 async def days(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -245,20 +250,14 @@ async def days(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     days = int(text)
-    price = 100 if days == 7 else 300
 
     orders[user.id] = days
     waiting_days.remove(user.id)
 
-    await context.bot.send_message(
-        ADMIN_ID,
-        f"🛒 Новый заказ\n\n👤 @{user.username}\n🆔 {user.id}\n📅 {days} дней"
-    )
-
     keyboard = [[InlineKeyboardButton("Купить", callback_data="confirm")]]
 
     await update.message.reply_text(
-        f"{days} дней = {price} голды",
+        f"{days} дней",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -281,32 +280,6 @@ async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.reply_text("Ожидайте скрин оплаты")
 
 
-# СКРИН АДМИНА
-async def admin_screen(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    if update.message.from_user.id != ADMIN_ID:
-        return
-
-    if not waiting_payment:
-        return
-
-    user_id = list(waiting_payment.keys())[0]
-
-    await context.bot.forward_message(
-        user_id,
-        update.message.chat_id,
-        update.message.message_id
-    )
-
-    keyboard = [[InlineKeyboardButton("✅ Оплатил", callback_data="paid")]]
-
-    await context.bot.send_message(
-        user_id,
-        "Нажмите после оплаты",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-
 async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -315,13 +288,36 @@ async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = query.from_user
     days = waiting_payment[user.id]
 
+    waiting_promo[user.id] = days
+
     await context.bot.send_message(
         ADMIN_ID,
-        f"Игрок ждёт промокод\n{days} дней"
+        f"Игрок оплатил\nОтправьте промокод для {days} дней"
     )
 
 
-# MAIN
+async def send_promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    if update.message.from_user.id != ADMIN_ID:
+        return
+
+    if not waiting_promo:
+        return
+
+    user_id = list(waiting_promo.keys())[0]
+
+    promo = update.message.text
+
+    await context.bot.send_message(
+        user_id,
+        f"🎟 Ваш промокод:\n\n{promo}"
+    )
+
+    await update.message.reply_text("Промокод отправлен")
+
+    waiting_promo.pop(user_id)
+
+
 def main():
 
     app = ApplicationBuilder().token(TOKEN).build()
@@ -340,7 +336,8 @@ def main():
     app.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO, media))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, days))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, get_player_id))
-    app.add_handler(MessageHandler(filters.PHOTO, admin_screen))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, send_promo))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check_promo))
 
     app.run_polling()
 
