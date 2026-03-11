@@ -11,9 +11,8 @@ from telegram.ext import (
     filters
 )
 
-TOKEN = "8771277043:AAF9ot5lj0G0HwGImuLHi-JUNSTKM6TEzz8"
+TOKEN = "ТВОЙ_ТОКЕН"
 ADMIN_ID = 5889477300
-ADMIN_USERNAME = "Kroniq_Pensia"
 
 logging.basicConfig(level=logging.INFO)
 
@@ -36,6 +35,7 @@ promo_codes = {
 used_codes = []
 
 
+# СТАРТ
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
@@ -45,12 +45,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await update.message.reply_text(
-        "👋 Добро пожаловать в клан 3TF\n\n"
-        "Выберите действие:",
+        "👋 Добро пожаловать в клан 3TF\n\nВыберите действие:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
+# ЗАЯВКА
 async def apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -66,12 +66,11 @@ async def apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cooldown[user.id] = now
 
     await query.message.reply_text(
-        "Отправьте:\n\n"
-        "1️⃣ Скрин профиля\n"
-        "2️⃣ Видео катки"
+        "Отправьте:\n\n1️⃣ Скрин профиля\n2️⃣ Видео катки"
     )
 
 
+# ПРОМО
 async def promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -80,6 +79,7 @@ async def promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.reply_text("Введите промокод")
 
 
+# ПОКУПКА
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -95,6 +95,7 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# ПОДТВЕРЖДЕНИЕ
 async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -113,6 +114,7 @@ async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.message.reply_text("Ожидайте скрин оплаты")
 
 
+# ОПЛАТИЛ
 async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -125,10 +127,33 @@ async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         ADMIN_ID,
-        f"Игрок оплатил\nОтправьте промокод для {days} дней"
+        f"Игрок оплатил\nОтправьте скрин и промокод для {days} дней"
     )
 
 
+# ОБРАБОТКА ФОТО (СКРИН)
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user = update.message.from_user
+
+    if user.id == ADMIN_ID and waiting_promo:
+
+        buyer_id = list(waiting_promo.keys())[0]
+
+        photo = update.message.photo[-1].file_id
+
+        await context.bot.send_photo(
+            chat_id=buyer_id,
+            photo=photo,
+            caption="✅ Оплата подтверждена"
+        )
+
+        await update.message.reply_text("Скрин отправлен покупателю")
+
+        return
+
+
+# ОБРАБОТКА ТЕКСТА
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.message.from_user
@@ -147,24 +172,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Промокод отправлен")
 
         waiting_promo.pop(buyer_id)
-
-        return
-
-
-    # ввод игрового ID
-    if user.id in waiting_for_id:
-
-        with open(PLAYERS_FILE, "a", encoding="utf-8") as f:
-            f.write(f"{user.username} | {user.id} | {text}\n")
-
-        await context.bot.send_message(
-            ADMIN_ID,
-            f"🎮 Новый игрок\n@{user.username}\nID: {text}"
-        )
-
-        await update.message.reply_text("ID отправлен")
-
-        waiting_for_id.remove(user.id)
 
         return
 
@@ -218,6 +225,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Промокод не правильний")
 
 
+# ЗАПУСК
 def main():
 
     app = ApplicationBuilder().token(TOKEN).build()
@@ -231,10 +239,10 @@ def main():
     app.add_handler(CallbackQueryHandler(paid, pattern="paid"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     app.run_polling()
 
 
 if __name__ == "__main__":
     main()
-
