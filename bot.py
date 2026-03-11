@@ -46,9 +46,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "👋 Добро пожаловать в клан 3TF\n\n"
-        "💰 Цены:\n"
-        "7 дней — 100 голды\n"
-        "30 дней — 300 голды\n\n"
         "Выберите действие:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -240,3 +237,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
