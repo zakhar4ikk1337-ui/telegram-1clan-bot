@@ -105,6 +105,26 @@ async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    global waiting_promo_user, waiting_confirm_user
+
+    query = update.callback_query
+    await query.answer()
+
+    user = query.from_user
+
+    waiting_promo_user = user.id
+
+    username = f"@{user.username}" if user.username else f"ID:{user.id}"
+
+    await context.bot.send_message(
+        ADMIN_ID,
+        f"💰 Покупатель оплатил\n\n"
+        f"👤 {username}\n\n"
+        f"Отправьте промокод"
+    )
+
+    await query.message.reply_text("⏳ Ожидайте промокод")
+    
     global waiting_promo_user
 
     query = update.callback_query
@@ -277,6 +297,34 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     photo = update.message.photo[-1].file_id
 
+    keyboard = [
+        [InlineKeyboardButton("✅ Купил", callback_data="paid")]
+    ]
+
+    await context.bot.send_photo(
+        chat_id=waiting_screenshot_user,
+        photo=photo,
+        caption="💳 Оплатите по этому скрину и нажмите кнопку 'Купил'",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+    waiting_confirm_user = waiting_screenshot_user
+    waiting_screenshot_user = None
+
+    await update.message.reply_text("✅ Скрин отправлен покупателю")
+    
+    global waiting_screenshot_user, waiting_confirm_user
+
+    user = update.message.from_user
+
+    if user.id != ADMIN_ID:
+        return
+
+    if not waiting_screenshot_user:
+        return
+
+    photo = update.message.photo[-1].file_id
+
     keyboard = [[InlineKeyboardButton("✅ Я оплатил", callback_data="paid")]]
 
     await context.bot.send_photo(
@@ -316,4 +364,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
