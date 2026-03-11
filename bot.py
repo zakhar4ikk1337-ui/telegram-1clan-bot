@@ -308,11 +308,12 @@ def main():
     app.add_handler(CallbackQueryHandler(application_decision, pattern="reject_"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    app.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO, handle_media))
+    app.add_handler(MessageHandler(filters.VIDEO, handle_media))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-
+    
     app.run_polling()
 
 
 if __name__ == "__main__":
     main()
+
