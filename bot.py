@@ -40,12 +40,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("📨 Подать заявку", callback_data="apply")],
-        [InlineKeyboardButton("🎁 Промокод", callback_data="promo")],
-        [InlineKeyboardButton("💰 Купить за голду", callback_data="buy")]
+        [InlineKeyboardButton("💰 Купить за голду", callback_data="buy")],
+        [InlineKeyboardButton("🎁 Ввести промокод", callback_data="promo")]
     ]
 
     await update.message.reply_text(
-        "👋 Добро пожаловать в клан 3TF",
+        "👋 Добро пожаловать в клан 3TF\n\n"
+        "💰 Цены:\n"
+        "7 дней — 100 голды\n"
+        "30 дней — 300 голды\n\n"
+        "Выберите действие:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -71,103 +75,6 @@ async def apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    user = update.message.from_user
-
-    if user.id == ADMIN_ID:
-
-        if not waiting_payment:
-            return
-
-        buyer_id = list(waiting_payment.keys())[0]
-
-        await context.bot.forward_message(
-            buyer_id,
-            update.message.chat_id,
-            update.message.message_id
-        )
-
-        keyboard = [[InlineKeyboardButton("✅ Оплатил", callback_data="paid")]]
-
-        await context.bot.send_message(
-            buyer_id,
-            "📸 Скрин оплаты\n\nНажмите кнопку после оплаты",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-
-        return
-
-    await context.bot.forward_message(
-        ADMIN_ID,
-        update.message.chat_id,
-        update.message.message_id
-    )
-
-    keyboard = [[
-        InlineKeyboardButton("✅ Принять", callback_data=f"accept_{user.id}"),
-        InlineKeyboardButton("❌ Отказать", callback_data=f"reject_{user.id}")
-    ]]
-
-    await context.bot.send_message(
-        ADMIN_ID,
-        f"📨 Новая заявка\n\n@{user.username}\n{user.id}",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-
-async def decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-    await query.answer()
-
-    data = query.data
-
-    if "accept_" in data:
-
-        user_id = int(data.split("_")[1])
-        waiting_for_id.add(user_id)
-
-        await context.bot.send_message(
-            user_id,
-            "✅ Вы приняты\n\nНапишите игровой ID"
-        )
-
-        await query.edit_message_text("Игрок принят")
-
-    if "reject_" in data:
-
-        user_id = int(data.split("_")[1])
-
-        keyboard = [[InlineKeyboardButton(
-            "Связаться с админом",
-            url=f"https://t.me/{ADMIN_USERNAME}"
-        )]]
-
-        await context.bot.send_message(
-            user_id,
-            "❌ Заявка отклонена",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-
-        await query.edit_message_text("Игрок отклонён")
-
-
-async def players(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    if update.message.from_user.id != ADMIN_ID:
-        return
-
-    try:
-        with open(PLAYERS_FILE, "r", encoding="utf-8") as f:
-            data = f.read()
-
-        await update.message.reply_text(data)
-
-    except:
-        await update.message.reply_text("Нет игроков")
-
-
 async def promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
@@ -183,7 +90,12 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     waiting_days.add(query.from_user.id)
 
-    await query.message.reply_text("Введите дни\n7 или 30")
+    await query.message.reply_text(
+        "💰 Покупка доступа\n\n"
+        "Введите количество дней:\n\n"
+        "7 дней — 100 голды\n"
+        "30 дней — 300 голды"
+    )
 
 
 async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -220,7 +132,6 @@ async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ГЛАВНАЯ функция текста
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.message.from_user
@@ -242,6 +153,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
+
     # ввод игрового ID
     if user.id in waiting_for_id:
 
@@ -259,26 +171,35 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         return
 
+
     # ввод дней
     if user.id in waiting_days:
 
         if text not in ["7","30"]:
-            await update.message.reply_text("Можно только 7 или 30")
+            await update.message.reply_text("Можно только 7 или 30 дней")
             return
 
         days = int(text)
 
+        if days == 7:
+            price = 100
+        else:
+            price = 300
+
         orders[user.id] = days
         waiting_days.remove(user.id)
 
-        keyboard = [[InlineKeyboardButton("Купить", callback_data="confirm")]]
+        keyboard = [[InlineKeyboardButton("💰 Купить", callback_data="confirm")]]
 
         await update.message.reply_text(
-            f"{days} дней",
+            f"📅 {days} дней\n"
+            f"💰 Цена: {price} голды\n\n"
+            f"Нажмите кнопку чтобы оформить покупку",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
         return
+
 
     # проверка промокода
     code = text.upper()
@@ -289,12 +210,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if code in promo_codes["7days"]:
         used_codes.append(code)
-        await update.message.reply_text("✅ Промокод активирован\n7 дней в клане 3TF")
+        await update.message.reply_text("✅ Промокод активирован\n📅 7 дней в клане 3TF")
         return
 
     if code in promo_codes["30days"]:
         used_codes.append(code)
-        await update.message.reply_text("✅ Промокод активирован\n30 дней в клане 3TF")
+        await update.message.reply_text("✅ Промокод активирован\n📅 30 дней в клане 3TF")
         return
 
     await update.message.reply_text("❌ Промокод не правильний")
@@ -305,17 +226,12 @@ def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("players", players))
 
     app.add_handler(CallbackQueryHandler(apply, pattern="apply"))
-    app.add_handler(CallbackQueryHandler(decision, pattern="accept_|reject_"))
-
     app.add_handler(CallbackQueryHandler(promo, pattern="promo"))
     app.add_handler(CallbackQueryHandler(buy, pattern="buy"))
     app.add_handler(CallbackQueryHandler(confirm, pattern="confirm"))
     app.add_handler(CallbackQueryHandler(paid, pattern="paid"))
-
-    app.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO, media))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
