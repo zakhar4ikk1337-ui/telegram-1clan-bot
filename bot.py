@@ -110,26 +110,50 @@ async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         ADMIN_ID,
-        f"🛒 Новый заказ\n@{user.username}\n{days} дней"
+        f"🛒 Новый заказ\n@{user.username}\n{days} дней\nЖдём скрин оплаты"
     )
 
-    await query.message.reply_text("Ожидайте скрин оплаты")
+    await query.message.reply_text("Отправьте скрин оплаты")
 
 
-async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ОБРАБОТКА СКРИНОВ
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    query = update.callback_query
-    await query.answer()
+    user = update.message.from_user
+    photo = update.message.photo[-1].file_id
 
-    user = query.from_user
-    days = waiting_payment[user.id]
+    # покупатель отправил скрин
+    if user.id in waiting_payment:
 
-    waiting_promo[user.id] = days
+        days = waiting_payment[user.id]
 
-    await context.bot.send_message(
-        ADMIN_ID,
-        f"Игрок оплатил\nОтправьте промокод для {days} дней"
-    )
+        await context.bot.send_photo(
+            ADMIN_ID,
+            photo,
+            caption=f"💰 Скрин оплаты\n@{user.username}\n{days} дней"
+        )
+
+        await update.message.reply_text("Скрин отправлен администратору")
+
+        waiting_promo[user.id] = days
+        waiting_payment.pop(user.id)
+
+        return
+
+    # админ отправляет скрин покупателю
+    if user.id == ADMIN_ID and waiting_promo:
+
+        buyer_id = list(waiting_promo.keys())[0]
+
+        await context.bot.send_photo(
+            buyer_id,
+            photo,
+            caption="✅ Оплата подтверждена"
+        )
+
+        await update.message.reply_text("Скрин отправлен покупателю")
+
+        return
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -181,10 +205,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         days = int(text)
 
-        if days == 7:
-            price = 100
-        else:
-            price = 300
+        price = 100 if days == 7 else 300
 
         orders[user.id] = days
         waiting_days.remove(user.id)
@@ -218,8 +239,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ Промокод активирован\n📅 30 дней в клане 3TF")
         return
 
-    await update.message.reply_text("❌ Промокод не правильний")
-
 
 def main():
 
@@ -231,9 +250,9 @@ def main():
     app.add_handler(CallbackQueryHandler(promo, pattern="promo"))
     app.add_handler(CallbackQueryHandler(buy, pattern="buy"))
     app.add_handler(CallbackQueryHandler(confirm, pattern="confirm"))
-    app.add_handler(CallbackQueryHandler(paid, pattern="paid"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     app.run_polling()
 
