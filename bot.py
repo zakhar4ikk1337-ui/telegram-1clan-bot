@@ -17,8 +17,13 @@ ADMIN_USERNAME = "Kroniq_Pensia"
 
 logging.basicConfig(level=logging.INFO)
 
+waiting_application = set()
+
 waiting_days = set()
+waiting_game_id = set()
+
 orders = {}
+game_ids = {}
 
 waiting_screenshot_user = None
 waiting_confirm_user = None
@@ -43,9 +48,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await update.message.reply_text(
-        "👋 Добро пожаловать в клан 3TF\n\n"
-        f"Администратор: @{ADMIN_USERNAME}\n\n"
-        "Выберите действие:",
+        f"👋 Добро пожаловать в клан 3TF\n\nАдмин: @{ADMIN_USERNAME}",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -56,27 +59,14 @@ async def apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user = query.from_user
-    now = time.time()
 
-    if user.id in cooldown and now - cooldown[user.id] < 300:
-        await query.message.reply_text("⏳ Подождите 5 минут")
-        return
-
-    cooldown[user.id] = now
+    waiting_application.add(user.id)
 
     await query.message.reply_text(
-        "Отправьте:\n\n"
+        "📨 Отправьте:\n\n"
         "1️⃣ Скрин профиля\n"
         "2️⃣ Видео катки"
     )
-
-
-async def promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-    await query.answer()
-
-    await query.message.reply_text("Введите промокод")
 
 
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -88,10 +78,18 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.message.reply_text(
         "💰 Покупка доступа\n\n"
-        "Введите количество дней:\n\n"
+        "Введите количество дней\n\n"
         "7 дней — 100 голды\n"
         "30 дней — 300 голды"
     )
+
+
+async def promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    query = update.callback_query
+    await query.answer()
+
+    await query.message.reply_text("Введите промокод")
 
 
 async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -102,7 +100,6 @@ async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user = query.from_user
-    days = orders[user.id]
 
     waiting_screenshot_user = user.id
 
@@ -110,14 +107,14 @@ async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_message(
         ADMIN_ID,
-        f"🛒 Новый заказ\n\n"
-        f"👤 Игрок: {username}\n"
-        f"📅 Тариф: {days} дней\n\n"
-        f"Админ: @{ADMIN_USERNAME}\n"
+        f"🛒 Новый заказ\n"
+        f"👤 {username}\n"
+        f"🎮 ID: {game_ids[user.id]}\n"
+        f"📅 {orders[user.id]} дней\n\n"
         f"Отправьте скрин оплаты"
     )
 
-    await query.message.reply_text("⏳ Ожидайте скрин оплаты от администратора")
+    await query.message.reply_text("⏳ Ожидайте скрин оплаты")
 
 
 async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -160,21 +157,27 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user.id in waiting_days:
 
         if text not in ["7","30"]:
-            await update.message.reply_text("Можно только 7 или 30 дней")
+            await update.message.reply_text("Можно только 7 или 30")
             return
 
-        days = int(text)
-        price = 100 if days == 7 else 300
+        orders[user.id] = int(text)
 
-        orders[user.id] = days
         waiting_days.remove(user.id)
+        waiting_game_id.add(user.id)
+
+        await update.message.reply_text("🎮 Введите ваш игровой ID")
+        return
+
+
+    if user.id in waiting_game_id:
+
+        game_ids[user.id] = text
+        waiting_game_id.remove(user.id)
 
         keyboard = [[InlineKeyboardButton("💰 Купить", callback_data="confirm")]]
 
         await update.message.reply_text(
-            f"📅 {days} дней\n"
-            f"💰 Цена: {price} голды\n\n"
-            f"Нажмите кнопку чтобы оформить покупку",
+            "Нажмите кнопку чтобы оформить покупку",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
@@ -189,15 +192,49 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if code in promo_codes["7days"]:
         used_codes.append(code)
-        await update.message.reply_text("✅ Промокод активирован\n📅 7 дней в клане 3TF")
+        await update.message.reply_text("✅ Промокод активирован\n7 дней в клане")
         return
 
     if code in promo_codes["30days"]:
         used_codes.append(code)
-        await update.message.reply_text("✅ Промокод активирован\n📅 30 дней в клане 3TF")
+        await update.message.reply_text("✅ Промокод активирован\n30 дней в клане")
         return
 
     await update.message.reply_text("❌ Промокод не правильний")
+
+
+async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user = update.message.from_user
+
+    if user.id not in waiting_application:
+        return
+
+    username = f"@{user.username}" if user.username else f"ID:{user.id}"
+
+    if update.message.photo:
+
+        photo = update.message.photo[-1].file_id
+
+        await context.bot.send_photo(
+            ADMIN_ID,
+            photo,
+            caption=f"📨 Новая заявка\n{username}"
+        )
+
+    elif update.message.video:
+
+        video = update.message.video.file_id
+
+        await context.bot.send_video(
+            ADMIN_ID,
+            video,
+            caption=f"📨 Новая заявка\n{username}"
+        )
+
+    await update.message.reply_text("✅ Заявка отправлена")
+
+    waiting_application.remove(user.id)
 
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -205,23 +242,28 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global waiting_screenshot_user, waiting_confirm_user
 
     user = update.message.from_user
+
+    if user.id != ADMIN_ID:
+        return
+
+    if not waiting_screenshot_user:
+        return
+
     photo = update.message.photo[-1].file_id
 
-    if user.id == ADMIN_ID and waiting_screenshot_user:
+    keyboard = [[InlineKeyboardButton("✅ Я оплатил", callback_data="paid")]]
 
-        keyboard = [[InlineKeyboardButton("✅ Я оплатил", callback_data="paid")]]
+    await context.bot.send_photo(
+        waiting_screenshot_user,
+        photo,
+        caption="💰 Оплатите по этому скрину и нажмите кнопку после оплаты",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
-        await context.bot.send_photo(
-            waiting_screenshot_user,
-            photo,
-            caption="💰 Оплатите по этому скрину и нажмите кнопку после оплаты",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+    waiting_confirm_user = waiting_screenshot_user
+    waiting_screenshot_user = None
 
-        waiting_confirm_user = waiting_screenshot_user
-        waiting_screenshot_user = None
-
-        await update.message.reply_text("Скрин отправлен покупателю")
+    await update.message.reply_text("Скрин отправлен покупателю")
 
 
 def main():
@@ -231,12 +273,13 @@ def main():
     app.add_handler(CommandHandler("start", start))
 
     app.add_handler(CallbackQueryHandler(apply, pattern="apply"))
-    app.add_handler(CallbackQueryHandler(promo, pattern="promo"))
     app.add_handler(CallbackQueryHandler(buy, pattern="buy"))
+    app.add_handler(CallbackQueryHandler(promo, pattern="promo"))
     app.add_handler(CallbackQueryHandler(confirm, pattern="confirm"))
     app.add_handler(CallbackQueryHandler(paid, pattern="paid"))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO, handle_media))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
 
     app.run_polling()
