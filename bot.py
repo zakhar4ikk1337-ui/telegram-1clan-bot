@@ -1,4 +1,3 @@
-
 import logging
 import time
 
@@ -12,7 +11,7 @@ from telegram.ext import (
     filters
 )
 
-TOKEN = "8771277043:AAF9ot5lj0G0HwGImuLHi-JUNSTKM6TEzz8"
+TOKEN = "ТВОЙ_ТОКЕН"
 ADMIN_ID = 5889477300
 ADMIN_USERNAME = "Kroniq_Pensia"
 
@@ -72,22 +71,6 @@ async def apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "2️⃣ Видео катки"
     )
 
-async def players(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    if update.message.from_user.id != ADMIN_ID:
-        return
-
-    try:
-        with open("players.txt", "r", encoding="utf-8") as f:
-            data = f.read()
-
-        if not data:
-            data = "Игроков пока нет"
-
-        await update.message.reply_text(f"📋 Игроки:\n\n{data}")
-
-    except:
-        await update.message.reply_text("Файл игроков не найден")
 
 # МЕДИА
 
@@ -331,8 +314,8 @@ def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("players", players))
     
+
     app.add_handler(CallbackQueryHandler(apply, pattern="apply"))
     app.add_handler(CallbackQueryHandler(decision, pattern="accept_|reject_"))
 
@@ -352,5 +335,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
