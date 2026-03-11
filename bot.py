@@ -8,24 +8,19 @@ ADMIN_USERNAME = "Kroniq_Pensia"
 
 logging.basicConfig(level=logging.INFO)
 
-waiting_application = set()
+orders = {}
 waiting_days = set()
-waiting_game_id = set()
+waiting_id = set()
 waiting_promo_input = set()
 
-orders = {}
-game_ids = {}
-
-waiting_screenshot_user = None
-waiting_confirm_user = None
-waiting_promo_user = None
-
 promo_codes = {
-    "7days": ["AAA111","AAA112","AAA113"],
-    "30days": ["BBB111","BBB112","BBB113"]
+    "7": ["AAA111","AAA112"],
+    "30": ["BBB111","BBB112"]
 }
 
 used_codes = []
+
+applications = set()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -37,307 +32,214 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await update.message.reply_text(
-        f"👋 Добро пожаловать в клан 3TF\n\nАдмин: @{ADMIN_USERNAME}",
+        "Добро пожаловать в клан 3TF",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
-async def apply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     query = update.callback_query
     await query.answer()
 
-    waiting_application.add(query.from_user.id)
+    user = query.from_user.id
 
-    await query.message.reply_text(
-        "📨 Отправьте скрин профиля или видео катки"
-    )
+    if query.data == "apply":
 
-
-async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-    await query.answer()
-
-    waiting_days.add(query.from_user.id)
-
-    await query.message.reply_text(
-        "Введите количество дней\n\n"
-        "7 дней — 100 голды\n"
-        "30 дней — 300 голды"
-    )
+        applications.add(user)
+        await query.message.reply_text("Отправьте скрин или видео катки")
 
 
-async def promo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if query.data == "buy":
 
-    query = update.callback_query
-    await query.answer()
+        waiting_days.add(user)
 
-    waiting_promo_input.add(query.from_user.id)
-
-    await query.message.reply_text("Введите промокод")
-
-
-async def confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    global waiting_screenshot_user
-
-    query = update.callback_query
-    await query.answer()
-
-    user = query.from_user
-
-    waiting_screenshot_user = user.id
-
-    username = f"@{user.username}" if user.username else f"ID:{user.id}"
-
-    await context.bot.send_message(
-        ADMIN_ID,
-        f"🛒 Новый заказ\n"
-        f"👤 {username}\n"
-        f"🎮 ID: {game_ids[user.id]}\n"
-        f"📅 {orders[user.id]} дней\n\n"
-        f"Отправьте скрин оплаты"
-    )
-
-    await query.message.reply_text("⏳ Ожидайте скрин оплаты")
+        await query.message.reply_text(
+            "Введите количество дней\n\n"
+            "7 дней — 100 голды\n"
+            "30 дней — 300 голды"
+        )
 
 
-async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if query.data == "promo":
 
-    global waiting_promo_user, waiting_confirm_user
+        waiting_promo_input.add(user)
 
-    query = update.callback_query
-    await query.answer()
-
-    user = query.from_user
-
-    waiting_promo_user = user.id
-
-    username = f"@{user.username}" if user.username else f"ID:{user.id}"
-
-    await context.bot.send_message(
-        ADMIN_ID,
-        f"💰 Покупатель оплатил\n\n"
-        f"👤 {username}\n\n"
-        f"Отправьте промокод"
-    )
-
-    await query.message.reply_text("⏳ Ожидайте промокод")
-    
-    global waiting_promo_user
-
-    query = update.callback_query
-    await query.answer()
-
-    waiting_promo_user = waiting_confirm_user
-
-    await context.bot.send_message(
-        ADMIN_ID,
-        "💰 Игрок оплатил\nОтправьте промокод"
-    )
-
-    await query.message.reply_text("⏳ Ожидайте промокод")
+        await query.message.reply_text("Введите промокод")
 
 
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if query.data == "confirm":
 
-    global waiting_promo_user
+        order = orders[user]
 
-    user = update.message.from_user
-    text = update.message.text.strip()
-
-    if user.id == ADMIN_ID and waiting_promo_user:
+        username = f"@{query.from_user.username}" if query.from_user.username else user
 
         await context.bot.send_message(
-            waiting_promo_user,
+            ADMIN_ID,
+            f"🛒 Новый заказ\n"
+            f"👤 {username}\n"
+            f"🎮 ID: {order['game_id']}\n"
+            f"📅 {order['days']} дней\n\n"
+            f"Отправьте скрин оплаты"
+        )
+
+        await query.message.reply_text("⏳ Ожидайте скрин оплаты")
+
+
+    if query.data == "paid":
+
+        username = f"@{query.from_user.username}" if query.from_user.username else user
+
+        await context.bot.send_message(
+            ADMIN_ID,
+            f"💰 Покупатель оплатил\n"
+            f"{username}\n\n"
+            f"Отправьте промокод"
+        )
+
+        await query.message.reply_text("⏳ Ожидайте промокод")
+
+
+async def text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user = update.message.from_user.id
+    text = update.message.text.strip()
+
+    if user == ADMIN_ID and context.user_data.get("promo_user"):
+
+        buyer = context.user_data["promo_user"]
+
+        await context.bot.send_message(
+            buyer,
             f"🎟 Ваш промокод:\n{text}"
         )
 
-        await update.message.reply_text("Промокод отправлен")
+        context.user_data["promo_user"] = None
 
-        waiting_promo_user = None
+        await update.message.reply_text("Промокод отправлен")
         return
 
 
-    if user.id in waiting_days:
+    if user in waiting_days:
 
         if text not in ["7","30"]:
-            await update.message.reply_text("Можно только 7 или 30")
+            await update.message.reply_text("Введите 7 или 30")
             return
 
-        orders[user.id] = int(text)
+        orders[user] = {"days": text}
 
-        waiting_days.remove(user.id)
-        waiting_game_id.add(user.id)
+        waiting_days.remove(user)
+        waiting_id.add(user)
 
-        await update.message.reply_text("Введите ваш игровой ID")
+        await update.message.reply_text("Введите игровой ID")
         return
 
 
-    if user.id in waiting_game_id:
+    if user in waiting_id:
 
-        game_ids[user.id] = text
-        waiting_game_id.remove(user.id)
+        orders[user]["game_id"] = text
+
+        waiting_id.remove(user)
 
         keyboard = [[InlineKeyboardButton("💰 Купить", callback_data="confirm")]]
 
         await update.message.reply_text(
-            "Нажмите кнопку чтобы оформить покупку",
+            "Нажмите кнопку для оформления",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
         return
 
 
-    if user.id in waiting_promo_input:
+    if user in waiting_promo_input:
 
-        waiting_promo_input.remove(user.id)
+        waiting_promo_input.remove(user)
 
         code = text.upper()
 
         if code in used_codes:
+
             await update.message.reply_text("❌ Промокод уже использован")
             return
 
-        if code in promo_codes["7days"]:
+
+        if code in promo_codes["7"]:
+
             used_codes.append(code)
+
             await update.message.reply_text("✅ Промокод активирован\n7 дней в клане")
+
             return
 
-        if code in promo_codes["30days"]:
+
+        if code in promo_codes["30"]:
+
             used_codes.append(code)
+
             await update.message.reply_text("✅ Промокод активирован\n30 дней в клане")
+
             return
 
-        await update.message.reply_text("❌ Промокод не правильний")
+
+        await update.message.reply_text("❌ Неверный промокод")
+
+
+async def media(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    user = update.message.from_user.id
+
+    if user in applications:
+
+        username = f"@{update.message.from_user.username}" if update.message.from_user.username else user
+
+        if update.message.photo:
+
+            await context.bot.send_photo(
+                ADMIN_ID,
+                update.message.photo[-1].file_id,
+                caption=f"📨 Заявка\n{username}"
+            )
+
+        elif update.message.video:
+
+            await context.bot.send_video(
+                ADMIN_ID,
+                update.message.video.file_id,
+                caption=f"📨 Заявка\n{username}"
+            )
+
+        await update.message.reply_text("Заявка отправлена")
+
+        applications.remove(user)
+
         return
 
 
-async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    user = update.message.from_user
-
-    if user.id not in waiting_application:
-        return
-
-    username = f"@{user.username}" if user.username else f"ID:{user.id}"
-
-    keyboard = [
-        [
-            InlineKeyboardButton("✅ Принять", callback_data=f"accept_{user.id}"),
-            InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_{user.id}")
-        ]
-    ]
-
-    if update.message.photo:
+    if user == ADMIN_ID:
 
         photo = update.message.photo[-1].file_id
 
+        buyer = None
+
+        for u in orders:
+            buyer = u
+            break
+
+        if not buyer:
+            return
+
+        keyboard = [[InlineKeyboardButton("✅ Купил", callback_data="paid")]]
+
         await context.bot.send_photo(
-            ADMIN_ID,
+            buyer,
             photo,
-            caption=f"📨 Новая заявка\n{username}",
+            caption="Оплатите и нажмите кнопку",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    elif update.message.video:
+        context.user_data["promo_user"] = buyer
 
-        video = update.message.video.file_id
-
-        await context.bot.send_video(
-            ADMIN_ID,
-            video,
-            caption=f"📨 Новая заявка\n{username}",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-
-    await update.message.reply_text("Заявка отправлена")
-
-    waiting_application.remove(user.id)
-
-
-async def application_decision(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    query = update.callback_query
-    await query.answer()
-
-    data = query.data
-    user_id = int(data.split("_")[1])
-
-    if data.startswith("accept"):
-
-        await context.bot.send_message(
-            user_id,
-            "✅ Ваш запрос приняли\nСкоро вам придет запрос в клан 3TF"
-        )
-
-        await query.edit_message_caption("Заявка принята")
-
-    else:
-
-        await context.bot.send_message(
-            user_id,
-            "❌ Ваш запрос отклонён"
-        )
-
-        await query.edit_message_caption("Заявка отклонена")
-
-
-async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    global waiting_screenshot_user, waiting_confirm_user
-
-    user = update.message.from_user
-
-    if user.id != ADMIN_ID:
-        return
-
-    if not waiting_screenshot_user:
-        return
-
-    photo = update.message.photo[-1].file_id
-
-    keyboard = [
-        [InlineKeyboardButton("✅ Купил", callback_data="paid")]
-    ]
-
-    await context.bot.send_photo(
-        chat_id=waiting_screenshot_user,
-        photo=photo,
-        caption="💳 Оплатите по этому скрину и нажмите кнопку 'Купил'",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-    waiting_confirm_user = waiting_screenshot_user
-    waiting_screenshot_user = None
-
-    await update.message.reply_text("✅ Скрин отправлен покупателю")
-    
-    global waiting_screenshot_user, waiting_confirm_user
-
-    user = update.message.from_user
-
-    if user.id != ADMIN_ID:
-        return
-
-    if not waiting_screenshot_user:
-        return
-
-    photo = update.message.photo[-1].file_id
-
-    keyboard = [[InlineKeyboardButton("✅ Я оплатил", callback_data="paid")]]
-
-    await context.bot.send_photo(
-        waiting_screenshot_user,
-        photo,
-        caption="Оплатите и нажмите кнопку после оплаты",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-    waiting_confirm_user = waiting_screenshot_user
-    waiting_screenshot_user = None
-
-    await update.message.reply_text("Скрин отправлен покупателю")
+        await update.message.reply_text("Скрин отправлен")
 
 
 def main():
@@ -346,23 +248,14 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
 
-    app.add_handler(CallbackQueryHandler(apply, pattern="apply"))
-    app.add_handler(CallbackQueryHandler(buy, pattern="buy"))
-    app.add_handler(CallbackQueryHandler(promo, pattern="promo"))
-    app.add_handler(CallbackQueryHandler(confirm, pattern="confirm"))
-    app.add_handler(CallbackQueryHandler(paid, pattern="paid"))
+    app.add_handler(CallbackQueryHandler(buttons))
 
-    app.add_handler(CallbackQueryHandler(application_decision, pattern="accept_"))
-    app.add_handler(CallbackQueryHandler(application_decision, pattern="reject_"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text))
 
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    app.add_handler(MessageHandler(filters.VIDEO, handle_media))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    
+    app.add_handler(MessageHandler(filters.PHOTO | filters.VIDEO, media))
+
     app.run_polling()
 
 
 if __name__ == "__main__":
     main()
-
-
